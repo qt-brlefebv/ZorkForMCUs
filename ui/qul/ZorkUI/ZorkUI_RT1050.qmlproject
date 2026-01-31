@@ -1,0 +1,64 @@
+import QmlProject 1.3
+
+Project {
+    qtForMCUs: true
+    mainFile: "ZorkUI_RT1050.qml"
+
+    MCU.Config {
+        controlsStyle: "QtQuick.Controls.StyleDefault"
+        debugBytecode: false
+        debugLineDirectives: false
+
+        // Global settings for image properties
+        resourceImagePixelFormat: "Automatic"
+        resourceCachePolicy: "NoCaching"
+        resourceCompression: false
+
+        // Font engine selection - Spark for runtime text rendering
+        // Static was causing cache exhaustion issues
+        fontEngine: "Spark"
+
+        // Font defaults
+        defaultFontFamily: "regular"
+        defaultFontQuality: "VeryHigh"
+        glyphsCachePolicy: "NoCaching"
+        maxParagraphSize: 4096
+
+        // Glyph layout cache for runtime text rendering
+        glyphsLayoutCacheSize: 65536  // 64KB
+
+        // Spark-specific settings
+        complexTextRendering: false  // Text adventures only need basic ASCII/Latin
+        fontCachePriming: false
+        fontCacheSize: 32768         // 32KB cache for rendered glyphs
+        fontHeapSize: -1             // No restrictions to heap allocation
+        fontHeapPrealloc: true
+        fontCachePrealloc: true
+    }
+
+    QmlFiles {
+        files: ["ZorkUI_RT1050.qml", "ZorkKeyboard.qml"]
+    }
+
+    ImageFiles {
+        files: ["images/compass-rose.png"]
+    }
+
+    FontFiles {
+        // Use fontmap for Spark engine (same as main qmlproject)
+        files: ["fonts/ZorkMCUFontmap.fmp"]
+    }
+
+    TranslationFiles {
+        files: []
+    }
+
+    InterfaceFiles {
+        files: ["FizmoBackend.h"]
+    }
+
+    ModuleFiles {
+        files: []
+        MCU.qulModules: []
+    }
+}

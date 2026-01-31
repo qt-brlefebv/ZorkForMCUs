@@ -1,0 +1,11 @@
+import QmlProject 1.2
+
+Project {
+    MCU.Config {
+        Experimental.resourceAlphaOptions: "Always"
+        platformAlphaPixelFormat: "ARGB8888"
+        platformOpaquePixelFormat: "XRGB8888"
+        Experimental.vkbScreenWidth: 480
+        Experimental.resourceSVGScale: 0.19
+    }
+}

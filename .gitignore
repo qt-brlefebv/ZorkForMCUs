@@ -1,0 +1,11 @@
+**/build*
+
+# Font files (license not verified)
+*.ttf
+*.otf
+
+# Temporary files
+tmp/
+
+# Claude Code
+.claude/

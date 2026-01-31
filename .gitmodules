@@ -1,0 +1,3 @@
+[submodule "external/libfizmo"]
+	path = external/libfizmo
+	url = https://github.com/chrender/libfizmo.git
