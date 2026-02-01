@@ -164,17 +164,21 @@ void FizmoBackend::submitLine(const Qul::Private::String &text)
         // String is in UTF-8 format
         // Copy to null-terminated buffer since maybeUtf8() isn't guaranteed null-terminated
         int len = text.rawLength();
-        if (len > 0 && len < FIZMO_INPUT_BUFFER_SIZE - 1) {
+        if (len < FIZMO_INPUT_BUFFER_SIZE - 1) {
             char buffer[FIZMO_INPUT_BUFFER_SIZE];
-            memcpy(buffer, utf8, len);
+            if (len > 0) {
+                memcpy(buffer, utf8, len);
+            }
             buffer[len] = '\0';
-            
+
             // Echo the command to output
 #if defined(USE_FIZMO_BRIDGE) || defined(DESKTOP_STUB)
             // Desktop build: fizmo already output ">", just add leading space
             char echoBuffer[FIZMO_INPUT_BUFFER_SIZE + 3];
             echoBuffer[0] = ' ';
-            memcpy(echoBuffer + 1, buffer, len);
+            if (len > 0) {
+                memcpy(echoBuffer + 1, buffer, len);
+            }
             echoBuffer[len + 1] = '\n';
             echoBuffer[len + 2] = '\0';
 
@@ -185,14 +189,16 @@ void FizmoBackend::submitLine(const Qul::Private::String &text)
             int echoLen = 0;
             echoBuffer[echoLen++] = '>';
             echoBuffer[echoLen++] = ' ';
-            memcpy(echoBuffer + echoLen, buffer, len);
-            echoLen += len;
+            if (len > 0) {
+                memcpy(echoBuffer + echoLen, buffer, len);
+                echoLen += len;
+            }
             echoBuffer[echoLen++] = '\n';
             echoBuffer[echoLen] = '\0';
 
             appendOutput(echoBuffer);
 #endif
-            
+
             fizmo_submit_line(buffer);
         }
         return;

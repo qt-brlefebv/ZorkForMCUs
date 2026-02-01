@@ -123,7 +123,15 @@ static char** screen_get_config_option_names() {
 
 static void screen_link_interface_to_story(struct z_story *story) {
     (void)story;
-    // Could store story info here if needed
+
+    // Set default savegame filename to "zork1.sav"
+    // This is used as the pre-filled default when user types SAVE/RESTORE
+    extern z_ucs last_savegame_filename[];
+    const char *default_name = "zork1.sav";
+    for (size_t i = 0; default_name[i] != '\0'; i++) {
+        last_savegame_filename[i] = static_cast<z_ucs>(default_name[i]);
+    }
+    last_savegame_filename[strlen(default_name)] = 0;
 }
 
 static void screen_reset_interface() {
@@ -285,15 +293,111 @@ static void screen_output_interface_info() {}
 static bool screen_input_must_be_repeated_by_story() { return false; }  // We echo in FizmoBackend::submitCommand()
 static void screen_game_was_restored_and_history_modified() {}
 
+// Storage for the save filename prompt
+static char s_saveFilename[256] = "zork1.sav";
+static const char* LASTFILE_NAME = ".zork_lastfile";
+
+// Load last used filename from config file
+static void load_last_filename() {
+    FILE *f = fopen(LASTFILE_NAME, "r");
+    if (f) {
+        if (fgets(s_saveFilename, sizeof(s_saveFilename), f)) {
+            // Remove trailing newline if present
+            size_t len = strlen(s_saveFilename);
+            if (len > 0 && s_saveFilename[len-1] == '\n') {
+                s_saveFilename[len-1] = '\0';
+            }
+        }
+        fclose(f);
+        fprintf(stderr, "[fizmo_bridge] Loaded last filename: %s\n", s_saveFilename);
+    }
+}
+
+// Save last used filename to config file
+static void save_last_filename() {
+    FILE *f = fopen(LASTFILE_NAME, "w");
+    if (f) {
+        fprintf(f, "%s\n", s_saveFilename);
+        fclose(f);
+    }
+}
 static int screen_prompt_for_filename(char *filename_suggestion, z_file **result_file,
     char *directory, int filetype_or_mode, int fileaccess)
 {
-    (void)filename_suggestion;
-    (void)result_file;
-    (void)directory;
     (void)filetype_or_mode;
-    (void)fileaccess;
-    return -3; // Not implemented
+
+    // Use suggestion if provided, otherwise use last saved filename
+    const char *default_name = (filename_suggestion && filename_suggestion[0])
+        ? filename_suggestion : s_saveFilename;
+
+    // Build prompt message
+    char prompt[512];
+    snprintf(prompt, sizeof(prompt), "\nEnter filename (default: %s): ", default_name);
+
+    // Output prompt
+    z_ucs prompt_ucs[512];
+    for (size_t i = 0; prompt[i] != '\0' && i < 511; i++) {
+        prompt_ucs[i] = static_cast<z_ucs>(prompt[i]);
+    }
+    prompt_ucs[strlen(prompt)] = 0;
+    screen_z_ucs_output(prompt_ucs);
+
+    // Wait for user input (reuse the line input mechanism)
+    s_waitingForInput.store(true);
+    s_inputReady.store(false);
+
+    {
+        std::unique_lock<std::mutex> lock(s_inputMutex);
+        s_inputCv.wait(lock, []{ return s_inputReady.load() || !s_running.load(); });
+    }
+
+    s_waitingForInput.store(false);
+
+    if (!s_running.load()) {
+        *result_file = nullptr;
+        return -1;
+    }
+
+    // Get the entered filename (or use default if empty)
+    char filename[256];
+    if (s_inputBuffer[0] == '\0') {
+        strncpy(filename, default_name, sizeof(filename) - 1);
+    } else {
+        strncpy(filename, s_inputBuffer, sizeof(filename) - 1);
+    }
+    filename[sizeof(filename) - 1] = '\0';
+
+    // Remember this filename for next time and persist it
+    strncpy(s_saveFilename, filename, sizeof(s_saveFilename) - 1);
+    s_saveFilename[sizeof(s_saveFilename) - 1] = '\0';
+    save_last_filename();
+
+    // Build full path if directory provided
+    char fullpath[512];
+    if (directory && directory[0] != '\0') {
+        snprintf(fullpath, sizeof(fullpath), "%s/%s", directory, filename);
+    } else {
+        strncpy(fullpath, filename, sizeof(fullpath) - 1);
+        fullpath[sizeof(fullpath) - 1] = '\0';
+    }
+
+    // Open the file
+    *result_file = fsi->openfile(fullpath, filetype_or_mode, fileaccess);
+
+    if (*result_file == nullptr) {
+        // Output error message
+        char errmsg[256];
+        snprintf(errmsg, sizeof(errmsg), "Could not open file: %s\n", fullpath);
+        z_ucs err_ucs[256];
+        for (size_t j = 0; errmsg[j] != '\0' && j < 255; j++) {
+            err_ucs[j] = static_cast<z_ucs>(errmsg[j]);
+        }
+        err_ucs[strlen(errmsg)] = 0;
+        screen_z_ucs_output(err_ucs);
+        return -1;
+    }
+
+    return static_cast<int>(strlen(filename));
 }
 
 // Screen interface struct
@@ -451,6 +555,9 @@ int fizmo_bridge_init(const char *story_path) {
     s_waitingForChar.store(false);
     s_gameExited.store(false);
     s_running.store(false);
+
+    // Load last used save filename from config
+    load_last_filename();
 
     return 0;
 }
