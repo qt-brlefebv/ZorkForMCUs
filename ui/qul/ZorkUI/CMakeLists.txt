@@ -8,10 +8,8 @@ set(DISPLAY_PROFILE "RT1050" CACHE STRING "Display profile (RT1050, RT1170, or R
 set_property(CACHE DISPLAY_PROFILE PROPERTY STRINGS "RT1050" "RT1170" "RT1170_SCALED")
 
 # Use custom board defaults for virtual keyboard width
-if(DISPLAY_PROFILE STREQUAL "RT1170")
-    set(QUL_PLATFORM_BOARD_DEFAULTS_QMLPROJECTCONFIG
-        "${CMAKE_CURRENT_SOURCE_DIR}/BoardDefaults_720vkb.qmlprojectconfig")
-elseif(DISPLAY_PROFILE STREQUAL "RT1170_SCALED")
+# NOTE: RT1170 uses platform defaults (custom overrides caused VGLite text blur)
+if(DISPLAY_PROFILE STREQUAL "RT1170_SCALED")
     set(QUL_PLATFORM_BOARD_DEFAULTS_QMLPROJECTCONFIG
         "${CMAKE_CURRENT_SOURCE_DIR}/BoardDefaults_540vkb.qmlprojectconfig")
 elseif(DISPLAY_PROFILE STREQUAL "RT1050")
@@ -53,6 +51,31 @@ else()
     message(STATUS "Build mode: Desktop STUB (UI testing only, no game logic)")
 endif()
 
+# =============================================================================
+# Board Detection (for FreeRTOS builds)
+# =============================================================================
+# Detect target board from QUL_PLATFORM to select correct SDK device directory
+# and board-specific source files.
+
+if(BUILD_WITH_FREERTOS)
+    # Extract board from platform name (e.g., "mimxrt1050-evk-freertos" -> "mimxrt1050")
+    string(REGEX MATCH "mimxrt[0-9]+" BOARD_CHIP "${QUL_PLATFORM}")
+
+    if(BOARD_CHIP MATCHES "mimxrt1050")
+        set(DEVICE_DIR "MIMXRT1052")
+        set(BOARD_TYPE "RT1050")
+        set(BOARD_SOURCES_DIR "${PROJECT_ROOT}/src/rt1050")
+        message(STATUS "Target board: RT1050-EVK (device: MIMXRT1052)")
+    elseif(BOARD_CHIP MATCHES "mimxrt1170")
+        set(DEVICE_DIR "MIMXRT1176")
+        set(BOARD_TYPE "RT1170")
+        set(BOARD_SOURCES_DIR "${PROJECT_ROOT}/src/rt1170")
+        message(STATUS "Target board: RT1170-EVKB (device: MIMXRT1176)")
+    else()
+        message(FATAL_ERROR "Unknown board in QUL_PLATFORM: ${QUL_PLATFORM}")
+    endif()
+endif()
+
 # Verify libfizmo submodule exists (required for non-stub builds)
 if(BUILD_WITH_FREERTOS OR BUILD_WITH_FIZMO)
     if(NOT EXISTS "${PROJECT_ROOT}/external/libfizmo/src/interpreter/fizmo.c")
@@ -84,7 +107,13 @@ if(BUILD_WITH_FREERTOS)
         ${PROJECT_ROOT}/src/fizmo_rtos_bridge.c
         ${PROJECT_ROOT}/src/fizmo_filesys_hybrid.c
         ${PROJECT_ROOT}/src/fizmo_locale_stubs.c
-        ${PROJECT_ROOT}/src/diskio_stub.c
+        # SD card / FatFS driver
+        ${PROJECT_ROOT}/src/fatfs/diskio.c
+        ${PROJECT_ROOT}/src/fatfs/ff_gen_drv.c
+        ${BOARD_SOURCES_DIR}/sdmmc_config.c
+        ${BOARD_SOURCES_DIR}/fsl_adapter_igpio.c
+        ${PROJECT_ROOT}/src/sd_diskio.c
+        ${PROJECT_ROOT}/src/sd_init.c
         ${PROJECT_ROOT}/src/posix_stubs.c
         ${PROJECT_ROOT}/src/story_data.S
         QML_PROJECT "${QML_PROJECT_FILE}"
@@ -100,6 +129,31 @@ if(BUILD_WITH_FREERTOS)
         ${PROJECT_ROOT}/external/libfizmo/src
         ${QUL_BOARD_SDK_DIR}/middleware/fatfs/source  # For ff.h (FatFS)
     )
+
+    # SDMMC and SD card driver includes
+    target_include_directories(ZorkUI PRIVATE
+        ${PROJECT_ROOT}/src/fatfs
+        ${BOARD_SOURCES_DIR}
+        ${QUL_BOARD_SDK_DIR}/components/gpio
+        ${QUL_BOARD_SDK_DIR}/components/lists
+        ${QUL_BOARD_SDK_DIR}/components/osa
+        ${QUL_BOARD_SDK_DIR}/devices/${DEVICE_DIR}
+        ${QUL_BOARD_SDK_DIR}/devices/${DEVICE_DIR}/drivers
+        ${QUL_BOARD_SDK_DIR}/middleware/sdmmc/common
+        ${QUL_BOARD_SDK_DIR}/middleware/sdmmc/host/usdhc
+        ${QUL_BOARD_SDK_DIR}/middleware/sdmmc/osa
+        ${QUL_BOARD_SDK_DIR}/middleware/sdmmc/sd
+    )
+
+    # RT1170 needs additional cm7 include for fsl_cache.h
+    if(BOARD_TYPE STREQUAL "RT1170")
+        target_include_directories(ZorkUI PRIVATE
+            ${QUL_BOARD_SDK_DIR}/devices/${DEVICE_DIR}/drivers/cm7
+        )
+        # Custom VGLite memory config with larger command buffer for text rendering
+        target_sources(ZorkUI PRIVATE ${PROJECT_ROOT}/src/rt1170/vglite_memory_config.c)
+        target_compile_definitions(ZorkUI PRIVATE CUSTOM_VGLITE_MEMORY_CONFIG=1)
+    endif()
 
     # Add libfizmo sources - explicitly list to exclude problematic files
     set(LIBFIZMO_INTERPRETER_SOURCES
@@ -150,6 +204,25 @@ if(BUILD_WITH_FREERTOS)
     )
     target_sources(ZorkUI PRIVATE ${FATFS_SOURCES})
 
+    # SDMMC middleware from NXP SDK
+    # RT1170 has fsl_cache.c in cm7 subdirectory, RT1050 has it directly in drivers
+    if(BOARD_TYPE STREQUAL "RT1170")
+        set(CACHE_DRIVER_PATH "${QUL_BOARD_SDK_DIR}/devices/${DEVICE_DIR}/drivers/cm7/fsl_cache.c")
+    else()
+        set(CACHE_DRIVER_PATH "${QUL_BOARD_SDK_DIR}/devices/${DEVICE_DIR}/drivers/fsl_cache.c")
+    endif()
+
+    set(SDMMC_SOURCES
+        "${QUL_BOARD_SDK_DIR}/devices/${DEVICE_DIR}/drivers/fsl_usdhc.c"
+        "${CACHE_DRIVER_PATH}"
+        "${QUL_BOARD_SDK_DIR}/middleware/sdmmc/common/fsl_sdmmc_common.c"
+        "${QUL_BOARD_SDK_DIR}/middleware/sdmmc/host/usdhc/non_blocking/fsl_sdmmc_host.c"
+        "${QUL_BOARD_SDK_DIR}/middleware/sdmmc/osa/fsl_sdmmc_osa.c"
+        "${QUL_BOARD_SDK_DIR}/middleware/sdmmc/sd/fsl_sd.c"
+        "${QUL_BOARD_SDK_DIR}/components/osa/fsl_os_abstraction_free_rtos.c"
+    )
+    target_sources(ZorkUI PRIVATE ${SDMMC_SOURCES})
+
     # libfizmo compile definitions (disable optional features)
     target_compile_definitions(ZorkUI PRIVATE
         DISABLE_BABEL=1
@@ -160,6 +233,7 @@ if(BUILD_WITH_FREERTOS)
         DISABLE_PREFIX_COMMANDS=1
         DISABLE_BLOCKBUFFER=1
         STORY_FILE_PATH="${PROJECT_ROOT}/zork1.z3"
+        SD_ENABLED=1
     )
 
     # Force-include our embedded compatibility header for C/C++ files only (not assembly)
@@ -167,6 +241,11 @@ if(BUILD_WITH_FREERTOS)
     target_compile_options(ZorkUI PRIVATE
         $<$<COMPILE_LANGUAGE:C>:-include "${PROJECT_ROOT}/src/fizmo_embedded_compat.h" >
         $<$<COMPILE_LANGUAGE:CXX>:-include "${PROJECT_ROOT}/src/fizmo_embedded_compat.h" >
+    )
+
+    # Suppress warnings in NXP SDK SDMMC code
+    target_compile_options(ZorkUI PRIVATE
+        $<$<COMPILE_LANGUAGE:C>:-Wno-unused-parameter -Wno-unused-variable>
     )
 
     # Enable Link-Time Optimization for smaller binary size
@@ -184,10 +263,11 @@ target_link_options(ZorkUI PRIVATE
     -Wl,--wrap=_free_r
     -Wl,--wrap=_calloc_r
     -Wl,--wrap=_realloc_r
+    -Wl,-Map=$<TARGET_FILE_DIR:ZorkUI>/ZorkUI.map
 )
 
-    # Link with FreeRTOS and FatFS (provided by platform)
-    # target_link_libraries(ZorkUI PRIVATE freertos_kernel fatfs)
+    # Link with platform BSP configuration (provides device headers for SDMMC)
+    target_link_libraries(ZorkUI PRIVATE Qul::PlatformBSPConfig)
 
 elseif(BUILD_WITH_FIZMO)
     # Desktop build with real fizmo interpreter via std::thread

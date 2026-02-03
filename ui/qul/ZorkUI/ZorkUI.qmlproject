@@ -11,35 +11,20 @@ Project {
         debugBytecode: false
         debugLineDirectives: false
 
-        // maxResourceCacheSize: 0 // Set to 0 by default. Required for OnDemand resource cache policy and resource compression.
-
-        // Global settings for image properties. Can be overridden for selected resources in ImageFiles nodes.
-        resourceImagePixelFormat: "Automatic"
         resourceCachePolicy: "NoCaching"
         resourceCompression: false
 
-        // Font engine selection
-        // Using Spark engine because text comes from C++ at runtime
-        // Static engine only pre-generates glyphs found in QML files at compile time
         fontEngine: "Spark"
-
-        // Font defaults for both engines
-        // Using "regular" to match the fontmap class name (from Qt text_input example)
         defaultFontFamily: "regular"
         defaultFontQuality: "VeryHigh"
         glyphsCachePolicy: "NoCaching"
         maxParagraphSize: 4096
+        glyphsLayoutCacheSize: 65536
 
-        // Glyph layout cache - new in Qt for MCUs 2.12
-        // Reduced from 131072 to save RAM
-        glyphsLayoutCacheSize: 65536  // 64KB - enough for ~4KB of rendered text
-
-        // Font properties for "Spark"
-        // These properties are in effect only if the "Spark" font engine is used
-        complexTextRendering: false // Text adventures only need basic ASCII/Latin
+        complexTextRendering: false
         fontCachePriming: false
-        fontCacheSize: 32768 // Reduced from 65536 - cache for rendered glyphs
-        fontHeapSize: -1 // No restrictions to heap allocation
+        fontCacheSize: 262144         // 256KB - matches RT1170 platform default
+        fontHeapSize: -1
         fontHeapPrealloc: true
         fontCachePrealloc: true
     }

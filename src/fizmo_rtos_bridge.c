@@ -23,6 +23,10 @@
 #include "screen_interface/screen_interface.h"
 #include "filesys_interface/filesys_interface.h"
 
+/* SD card availability check and FatFS for filename persistence */
+#include "sd_init.h"
+#include "ff.h"
+
 /* Forward declarations for screen interface */
 static char* rtos_get_interface_name(void);
 static bool rtos_is_status_line_available(void);
@@ -76,6 +80,8 @@ static void rtos_erase_line_pixels(uint16_t start_position);
 static void rtos_output_interface_info(void);
 static bool rtos_input_must_be_repeated_by_story(void);
 static void rtos_game_was_restored_and_history_modified(void);
+static int rtos_prompt_for_filename(char *filename_suggestion, z_file **result_file,
+    char *directory, int filetype_or_mode, int fileaccess);
 
 /* Screen interface structure */
 static struct z_screen_interface rtos_screen_interface = {
@@ -127,7 +133,7 @@ static struct z_screen_interface rtos_screen_interface = {
     .output_interface_info = rtos_output_interface_info,
     .input_must_be_repeated_by_story = rtos_input_must_be_repeated_by_story,
     .game_was_restored_and_history_modified = rtos_game_was_restored_and_history_modified,
-    .prompt_for_filename = NULL,
+    .prompt_for_filename = rtos_prompt_for_filename,
     .do_autosave = NULL,
     .restore_autosave = NULL
 };
@@ -155,6 +161,54 @@ static volatile bool s_status_valid = false;
 /* Current cursor position */
 static uint16_t s_cursor_row = 1;
 static uint16_t s_cursor_column = 1;
+
+/* Last used save filename (remembered across save/restore calls) */
+static char s_last_save_filename[64] = "zork1.sav";
+
+/* Path to the filename persistence file */
+#define LASTFN_PATH "/saves/lastfn.txt"
+
+/*
+ * Load last used filename from SD card (call after SD mount)
+ */
+static void load_last_filename(void)
+{
+    FIL fil;
+    if (f_open(&fil, LASTFN_PATH, FA_READ | FA_OPEN_EXISTING) != FR_OK) {
+        return;  /* File doesn't exist yet, use default */
+    }
+
+    char buf[64];
+    UINT br;
+    if (f_read(&fil, buf, sizeof(buf) - 1, &br) == FR_OK && br > 0) {
+        buf[br] = '\0';
+        /* Strip trailing newline/whitespace */
+        while (br > 0 && (buf[br-1] == '\n' || buf[br-1] == '\r' || buf[br-1] == ' ')) {
+            buf[--br] = '\0';
+        }
+        if (br > 0) {
+            strncpy(s_last_save_filename, buf, sizeof(s_last_save_filename) - 1);
+            s_last_save_filename[sizeof(s_last_save_filename) - 1] = '\0';
+        }
+    }
+    f_close(&fil);
+}
+
+/*
+ * Save last used filename to SD card
+ */
+static void save_last_filename(void)
+{
+    FIL fil;
+    if (f_open(&fil, LASTFN_PATH, FA_WRITE | FA_CREATE_ALWAYS) != FR_OK) {
+        return;  /* Can't create file, silently fail */
+    }
+
+    UINT bw;
+    f_write(&fil, s_last_save_filename, strlen(s_last_save_filename), &bw);
+    f_write(&fil, "\n", 1, &bw);
+    f_close(&fil);
+}
 
 /*
  * Helper: send a single z_ucs character to the output queue
@@ -211,27 +265,23 @@ int fizmo_bridge_init(void)
 
 int fizmo_bridge_run(const uint8_t *story_data, size_t story_size)
 {
+    (void)story_data;
+    (void)story_size;
+
     /*
      * Note: The filesystem interface should already be registered
      * by fizmo_filesys_hybrid.c before calling this function.
      * The story z_file is opened via that interface.
      */
 
-    printf("[fizmo_bridge_run] Opening story file...\n");
-    fflush(stdout);
-
     /* Open story from embedded data via the registered filesys interface */
     z_file *story_file = fsi->openfile("@embedded", FILETYPE_DATA, FILEACCESS_READ);
     if (story_file == NULL) {
-        printf("[fizmo_bridge_run] FAILED to open story\n");
         return -1;
     }
-    printf("[fizmo_bridge_run] Story opened, calling fizmo_start...\n");
-    fflush(stdout);
 
     /* Start the interpreter - this blocks until game ends */
     fizmo_start(story_file, NULL, NULL);
-    printf("[fizmo_bridge_run] fizmo_start returned\n");
 
     /* Mark as exited */
     xSemaphoreTake(s_state_mutex, portMAX_DELAY);
@@ -360,6 +410,11 @@ uint16_t fizmo_get_screen_width(void)
 uint16_t fizmo_get_screen_height(void)
 {
     return FIZMO_SCREEN_HEIGHT;
+}
+
+void fizmo_load_saved_filename(void)
+{
+    load_last_filename();
 }
 
 /*
@@ -732,4 +787,90 @@ static bool rtos_input_must_be_repeated_by_story(void)
 static void rtos_game_was_restored_and_history_modified(void)
 {
     /* Could trigger UI refresh here */
+}
+
+/*
+ * Prompt user for a filename (for save/restore operations)
+ * Returns: length of filename on success, -1 on failure
+ */
+static int rtos_prompt_for_filename(char *filename_suggestion, z_file **result_file,
+    char *directory, int filetype_or_mode, int fileaccess)
+{
+    (void)directory;  /* We use a fixed save location */
+
+    /* Check if SD card is available */
+    if (!sd_filesystem_available()) {
+        /* Output error message to game */
+        z_ucs msg[] = {'\n', '[', 'S', 'D', ' ', 'c', 'a', 'r', 'd', ' ',
+                       'n', 'o', 't', ' ', 'a', 'v', 'a', 'i', 'l', 'a',
+                       'b', 'l', 'e', ' ', '-', ' ', 'c', 'a', 'n', 'n',
+                       'o', 't', ' ', 's', 'a', 'v', 'e', '/', 'r', 'e',
+                       's', 't', 'o', 'r', 'e', ']', '\n', 0};
+        rtos_z_ucs_output(msg);
+        *result_file = NULL;
+        return -1;
+    }
+
+    /* Use suggestion, last used filename, or hardcoded default */
+    const char *default_name = (filename_suggestion && filename_suggestion[0])
+        ? filename_suggestion : s_last_save_filename;
+
+    /* Build and output prompt */
+    char prompt[128];
+    snprintf(prompt, sizeof(prompt), "\nEnter filename [%s]: ", default_name);
+    z_ucs prompt_ucs[128];
+    for (size_t i = 0; prompt[i] != '\0' && i < 127; i++) {
+        prompt_ucs[i] = (z_ucs)prompt[i];
+    }
+    prompt_ucs[strlen(prompt)] = 0;
+    rtos_z_ucs_output(prompt_ucs);
+
+    /* Wait for user input */
+    xSemaphoreTake(s_state_mutex, portMAX_DELAY);
+    s_waiting_for_line = true;
+    xSemaphoreGive(s_state_mutex);
+
+    xSemaphoreTake(s_input_ready_sem, portMAX_DELAY);
+
+    xSemaphoreTake(s_state_mutex, portMAX_DELAY);
+    s_waiting_for_line = false;
+    xSemaphoreGive(s_state_mutex);
+
+    /* Use entered filename or default if empty */
+    char filename[64];
+    if (s_input_length > 0 && s_input_buffer[0] != '\0') {
+        strncpy(filename, s_input_buffer, sizeof(filename) - 1);
+    } else {
+        strncpy(filename, default_name, sizeof(filename) - 1);
+    }
+    filename[sizeof(filename) - 1] = '\0';
+
+    /* Open the file via global filesystem interface (fsi from filesys.h) */
+    extern struct z_filesys_interface *fsi;
+    if (fsi == NULL || fsi->openfile == NULL) {
+        z_ucs msg[] = {'\n', '[', 'F', 'i', 'l', 'e', 's', 'y', 's', 't',
+                       'e', 'm', ' ', 'e', 'r', 'r', 'o', 'r', ']', '\n', 0};
+        rtos_z_ucs_output(msg);
+        *result_file = NULL;
+        return -1;
+    }
+
+    /* Open the file */
+    *result_file = fsi->openfile(filename, filetype_or_mode, fileaccess);
+
+    if (*result_file == NULL) {
+        /* Output error message */
+        z_ucs msg[] = {'\n', '[', 'C', 'o', 'u', 'l', 'd', ' ', 'n', 'o',
+                       't', ' ', 'o', 'p', 'e', 'n', ' ', 's', 'a', 'v',
+                       'e', ' ', 'f', 'i', 'l', 'e', ']', '\n', 0};
+        rtos_z_ucs_output(msg);
+        return -1;
+    }
+
+    /* Remember this filename for next time (in memory and on SD) */
+    strncpy(s_last_save_filename, filename, sizeof(s_last_save_filename) - 1);
+    s_last_save_filename[sizeof(s_last_save_filename) - 1] = '\0';
+    save_last_filename();
+
+    return (int)strlen(filename);
 }

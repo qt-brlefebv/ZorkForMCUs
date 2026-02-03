@@ -1,4 +1,7 @@
-**/build*
+# Build directories (but not build scripts)
+**/build*/
+!**/build*.sh
+!**/build*.bat
 
 # Font files (license not verified)
 *.ttf

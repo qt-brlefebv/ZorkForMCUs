@@ -44,17 +44,15 @@ For CI/automation or command-line builds:
 ```bash
 # Desktop
 mkdir -p build && cd build
-bash ../ui/qul/ZorkUI/build-run.sh
+bash ../ui/qul/ZorkUI/build-run-desktop.sh
 
-# RT1170
+# RT1170 (builds and flashes)
 mkdir -p ui/qul/ZorkUI/build-rt1170 && cd ui/qul/ZorkUI/build-rt1170
-bash ../build-rt1170.sh
-ninja flash_ZorkUI
+bash ../build-flash-rt1170.sh
 
-# RT1050
+# RT1050 (builds and flashes)
 mkdir -p ui/qul/ZorkUI/build-rt1050 && cd ui/qul/ZorkUI/build-rt1050
-bash ../build-rt1050.sh
-ninja flash_ZorkUI
+bash ../build-flash-rt1050.sh
 ```
 
 ## Project Structure

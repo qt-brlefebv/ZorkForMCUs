@@ -184,17 +184,14 @@ void FizmoBackend::submitLine(const Qul::Private::String &text)
 
             appendOutput(echoBuffer);
 #else
-            // Hardware (FreeRTOS): Add "> " prefix
-            char echoBuffer[FIZMO_INPUT_BUFFER_SIZE + 4];
-            int echoLen = 0;
-            echoBuffer[echoLen++] = '>';
-            echoBuffer[echoLen++] = ' ';
+            // Hardware (FreeRTOS): fizmo outputs ">", just add leading space
+            char echoBuffer[FIZMO_INPUT_BUFFER_SIZE + 3];
+            echoBuffer[0] = ' ';
             if (len > 0) {
-                memcpy(echoBuffer + echoLen, buffer, len);
-                echoLen += len;
+                memcpy(echoBuffer + 1, buffer, len);
             }
-            echoBuffer[echoLen++] = '\n';
-            echoBuffer[echoLen] = '\0';
+            echoBuffer[len + 1] = '\n';
+            echoBuffer[len + 2] = '\0';
 
             appendOutput(echoBuffer);
 #endif

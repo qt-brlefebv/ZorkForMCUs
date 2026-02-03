@@ -7,7 +7,7 @@
  * Configuration:
  * - Read/write mode (for save games)
  * - FreeRTOS re-entrant mode
- * - Short filenames only (8.3 format)
+ * - Long filename support (LFN) with stack buffer
  * - Single volume (SD card)
  */
 
@@ -64,17 +64,17 @@
 #define FF_CODE_PAGE	437
 /* U.S. (ASCII) - sufficient for save filenames */
 
-#define FF_USE_LFN		0
-#define FF_MAX_LFN		255
-/* Use short filenames (8.3) only - saves memory
- * Save files: ZORK1.SAV, SAVE01.SAV, etc. */
+#define FF_USE_LFN		2
+#define FF_MAX_LFN		64
+/* Long filename support enabled (uses stack buffer)
+ * Max 64 chars is plenty for save filenames like "zork1_westhouse.sav" */
 
 #define FF_LFN_UNICODE	0
-/* ANSI/OEM - not using LFN anyway */
+/* ANSI/OEM encoding for LFN */
 
-#define FF_LFN_BUF		255
+#define FF_LFN_BUF		64
 #define FF_SFN_BUF		12
-/* Short filename buffer */
+/* LFN working buffer on stack (~130 bytes per open file operation) */
 
 #define FF_FS_RPATH		2
 /* Support relative paths and getcwd() */
@@ -140,5 +140,14 @@
 
 #define SD_DISK_ENABLE 1
 /* Enable SD card disk */
+
+/*---------------------------------------------------------------------------/
+/ Compatibility defines for driver framework
+/---------------------------------------------------------------------------*/
+
+/* Map old-style macros to new names for ff_gen_drv.h compatibility */
+#define _USE_WRITE  (FF_FS_READONLY == 0)
+#define _USE_IOCTL  1
+#define _VOLUMES    FF_VOLUMES
 
 #endif /* _FFCONF_H_ */

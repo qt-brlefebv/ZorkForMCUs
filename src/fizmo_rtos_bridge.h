@@ -136,6 +136,12 @@ bool fizmo_has_exited(void);
 uint16_t fizmo_get_screen_width(void);
 uint16_t fizmo_get_screen_height(void);
 
+/*
+ * Load last used save filename from SD card.
+ * Call after SD card is mounted to restore filename across reboots.
+ */
+void fizmo_load_saved_filename(void);
+
 #ifdef __cplusplus
 }
 #endif

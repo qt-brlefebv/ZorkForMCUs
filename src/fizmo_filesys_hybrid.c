@@ -144,6 +144,9 @@ int fizmo_filesys_mount_sd(void)
         return -1;
     }
 
+    /* Ensure saves directory exists (f_mkdir fails silently if it already exists) */
+    f_mkdir("/saves");
+
     s_sd_mounted = 1;
     return 0;
 }

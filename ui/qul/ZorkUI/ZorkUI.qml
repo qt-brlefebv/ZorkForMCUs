@@ -53,6 +53,7 @@ Rectangle {
             font.pixelSize: FizmoBackend.fontSize
             text: root.statusVer >= 0 ? FizmoBackend.getStatusScore() : ""
         }
+
     }
 
     // Main text output area
@@ -61,7 +62,7 @@ Rectangle {
         anchors.top: statusBar.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.bottom: inputArea.top
+        anchors.bottom: compassRose.top
         anchors.margins: FizmoBackend.margin
         clip: true
         contentWidth: width
@@ -69,8 +70,8 @@ Rectangle {
 
         Text {
             id: outputText
-            width: outputFlickable.width - 70  // Reserve right side for GUI icons
-            color: "#00ff88"  // Classic green terminal color
+            width: outputFlickable.width
+            color: "#00ff88"
             font.pixelSize: FizmoBackend.fontSize
             wrapMode: Text.Wrap
             text: root.outputVer >= 0 ? FizmoBackend.getOutputText() : ""
@@ -89,8 +90,8 @@ Rectangle {
     Image {
         id: compassRose
         source: "images/compass-rose.png"
-        width: 64
-        height: 64
+        width: 128
+        height: 128
         opacity: 0.7
         anchors.right: parent.right
         anchors.bottom: inputArea.top

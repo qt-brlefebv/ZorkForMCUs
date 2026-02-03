@@ -1,43 +1,50 @@
 // ZorkKeyboard.qml
 //
-// Simple on-screen keyboard for text adventure input.
+// On-screen keyboard for text adventure input with punctuation support.
 // Qt for MCUs compatible - uses hardcoded font sizes for Static font engine.
 // Font sizes: 16 (regular keys), 20 (special keys < and GO)
+//
+// Layout (Option 2 - 11 keys per row at 40px):
+//   Row 1: 1 2 3 4 5 6 7 8 9 0 .
+//   Row 2: Q W E R T Y U I O P ,
+//   Row 3: A S D F G H J K L " <
+//   Row 4: Z X C V B N M ' ? [space] [GO]
 import QtQuick
 
 Rectangle {
     id: keyboard
     color: "#1a1a2e"
-    
+
     // Signals - parent handles the text manipulation
     signal keyPressed(string key)
     signal enterPressed()
     signal backspacePressed()
-    
+
     // Keyboard sizing - adjust for different displays
-    property int keyWidth: 42
+    // Reduced from 42 to 40 to fit 11 keys per row (470px total)
+    property int keyWidth: 40
     property int keyHeight: 38
     property int keySpacing: 3
     property int rowSpacing: 3
-    
+
     // Colors matching Zork theme
     property color keyColor: "#263238"
     property color keyPressedColor: "#4f5b62"
     property color keyTextColor: "#ffffff"
     property color specialKeyColor: "#01579b"
-    
+
     // Explicit height (4 rows + spacing + padding)
     height: (keyHeight * 4) + (rowSpacing * 3) + 8
-    
+
     Column {
         anchors.centerIn: parent
         spacing: keyboard.rowSpacing
-        
-        // Row 1: Numbers
+
+        // Row 1: Numbers + period
         Row {
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: keyboard.keySpacing
-            
+
             Rectangle {
                 width: keyboard.keyWidth; height: keyboard.keyHeight; radius: 4
                 color: ma1.pressed ? keyboard.keyPressedColor : keyboard.keyColor
@@ -98,13 +105,20 @@ Rectangle {
                 Text { anchors.centerIn: parent; text: "0"; color: keyboard.keyTextColor; font.pixelSize: 16 }
                 MouseArea { id: ma0; anchors.fill: parent; onClicked: keyboard.keyPressed("0") }
             }
+            // Period - command separator ("then")
+            Rectangle {
+                width: keyboard.keyWidth; height: keyboard.keyHeight; radius: 4
+                color: maPeriod.pressed ? keyboard.keyPressedColor : keyboard.keyColor
+                Text { anchors.centerIn: parent; text: "."; color: keyboard.keyTextColor; font.pixelSize: 16 }
+                MouseArea { id: maPeriod; anchors.fill: parent; onClicked: keyboard.keyPressed(".") }
+            }
         }
-        
-        // Row 2: QWERTYUIOP
+
+        // Row 2: QWERTYUIOP + comma
         Row {
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: keyboard.keySpacing
-            
+
             Rectangle {
                 width: keyboard.keyWidth; height: keyboard.keyHeight; radius: 4
                 color: maQ.pressed ? keyboard.keyPressedColor : keyboard.keyColor
@@ -165,13 +179,20 @@ Rectangle {
                 Text { anchors.centerIn: parent; text: "P"; color: keyboard.keyTextColor; font.pixelSize: 16 }
                 MouseArea { id: maP; anchors.fill: parent; onClicked: keyboard.keyPressed("p") }
             }
+            // Comma - word separator for addressing NPCs
+            Rectangle {
+                width: keyboard.keyWidth; height: keyboard.keyHeight; radius: 4
+                color: maComma.pressed ? keyboard.keyPressedColor : keyboard.keyColor
+                Text { anchors.centerIn: parent; text: ","; color: keyboard.keyTextColor; font.pixelSize: 16 }
+                MouseArea { id: maComma; anchors.fill: parent; onClicked: keyboard.keyPressed(",") }
+            }
         }
-        
-        // Row 3: ASDFGHJKL + Backspace
+
+        // Row 3: ASDFGHJKL + " + Backspace
         Row {
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: keyboard.keySpacing
-            
+
             Rectangle {
                 width: keyboard.keyWidth; height: keyboard.keyHeight; radius: 4
                 color: maA.pressed ? keyboard.keyPressedColor : keyboard.keyColor
@@ -226,6 +247,13 @@ Rectangle {
                 Text { anchors.centerIn: parent; text: "L"; color: keyboard.keyTextColor; font.pixelSize: 16 }
                 MouseArea { id: maL; anchors.fill: parent; onClicked: keyboard.keyPressed("l") }
             }
+            // Double quote - for SAY/ANSWER commands
+            Rectangle {
+                width: keyboard.keyWidth; height: keyboard.keyHeight; radius: 4
+                color: maQuote.pressed ? keyboard.keyPressedColor : keyboard.keyColor
+                Text { anchors.centerIn: parent; text: "\""; color: keyboard.keyTextColor; font.pixelSize: 16 }
+                MouseArea { id: maQuote; anchors.fill: parent; onClicked: keyboard.keyPressed("\"") }
+            }
             // Backspace
             Rectangle {
                 width: keyboard.keyWidth; height: keyboard.keyHeight; radius: 4
@@ -234,12 +262,12 @@ Rectangle {
                 MouseArea { id: maBS; anchors.fill: parent; onClicked: keyboard.backspacePressed() }
             }
         }
-        
-        // Row 4: ZXCVBNM + Space + Enter
+
+        // Row 4: ZXCVBNM + ' + ? + Space + Enter
         Row {
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: keyboard.keySpacing
-            
+
             Rectangle {
                 width: keyboard.keyWidth; height: keyboard.keyHeight; radius: 4
                 color: maZ.pressed ? keyboard.keyPressedColor : keyboard.keyColor
@@ -282,16 +310,30 @@ Rectangle {
                 Text { anchors.centerIn: parent; text: "M"; color: keyboard.keyTextColor; font.pixelSize: 16 }
                 MouseArea { id: maM; anchors.fill: parent; onClicked: keyboard.keyPressed("m") }
             }
-            // Space bar
+            // Apostrophe - for contractions
             Rectangle {
-                width: keyboard.keyWidth * 1.5; height: keyboard.keyHeight; radius: 4
+                width: keyboard.keyWidth; height: keyboard.keyHeight; radius: 4
+                color: maApos.pressed ? keyboard.keyPressedColor : keyboard.keyColor
+                Text { anchors.centerIn: parent; text: "'"; color: keyboard.keyTextColor; font.pixelSize: 16 }
+                MouseArea { id: maApos; anchors.fill: parent; onClicked: keyboard.keyPressed("'") }
+            }
+            // Question mark - for queries
+            Rectangle {
+                width: keyboard.keyWidth; height: keyboard.keyHeight; radius: 4
+                color: maQuestion.pressed ? keyboard.keyPressedColor : keyboard.keyColor
+                Text { anchors.centerIn: parent; text: "?"; color: keyboard.keyTextColor; font.pixelSize: 16 }
+                MouseArea { id: maQuestion; anchors.fill: parent; onClicked: keyboard.keyPressed("?") }
+            }
+            // Space bar - reduced to 45px to fit row
+            Rectangle {
+                width: 45; height: keyboard.keyHeight; radius: 4
                 color: maSpace.pressed ? keyboard.keyPressedColor : keyboard.keyColor
                 Text { anchors.centerIn: parent; text: "_"; color: keyboard.keyTextColor; font.pixelSize: 16 }
                 MouseArea { id: maSpace; anchors.fill: parent; onClicked: keyboard.keyPressed(" ") }
             }
-            // Enter/Go
+            // Enter/Go - reduced to 45px to fit row
             Rectangle {
-                width: keyboard.keyWidth * 1.5; height: keyboard.keyHeight; radius: 4
+                width: 45; height: keyboard.keyHeight; radius: 4
                 color: maEnter.pressed ? keyboard.keyPressedColor : keyboard.specialKeyColor
                 Text { anchors.centerIn: parent; text: "GO"; color: keyboard.keyTextColor; font.pixelSize: 20 }
                 MouseArea { id: maEnter; anchors.fill: parent; onClicked: keyboard.enterPressed() }
